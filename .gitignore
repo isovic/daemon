@@ -3,3 +3,5 @@ bin/
 .cproject
 .project
 temp*
+test/in/
+.settings/

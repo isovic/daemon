@@ -13,6 +13,7 @@ Daemon::Daemon() {
   is_dry_run_ = false;
   queue_sem_ = createSemaphore(1);
   active_sem_ = createSemaphore(0);
+  terminate_ = false;
 }
 
 Daemon::~Daemon() {
@@ -25,8 +26,9 @@ Daemon& Daemon::GetInstance() {
 
 void SigCallback(int sig) {
   Daemon::GetInstance().set_run(false);
+  Daemon::GetInstance().terminate_ = true;
+  Daemon::GetInstance().active_sem_->post();
 }
-
 
 //FileManager{
 //    wait for new file ...
@@ -74,16 +76,18 @@ void Daemon::Run(std::string watch_folder, std::string output_folder, std::strin
   signal(SIGINT, SigCallback);
 
   if (files_to_process_.size() > 0) {
+    queue_sem_->post();
     active_sem_->post();
   }
 
   run_ = true;
+  terminate_ = false;
   // Run a separate thread for executing jobs on files.
-  std::thread thread_jobs(&Daemon::RunJobs_, this);
+  std::thread thread_job(&Daemon::RunJobs_, this);
   // Run the Inotifier process.
   RunNotifier_();
   // Join the threads.
-  thread_jobs.join();
+  thread_job.join();
 }
 
 void Daemon::PopulateQueueFromFolder_(std::string folder_path) {
@@ -171,6 +175,7 @@ void Daemon::RunNotifier_() {
             fflush (stderr);
           }
 
+          bool add_event = false;
           std::string event_name_string = std::string(event->name);
 
           if ( event->len ) {
@@ -184,15 +189,17 @@ void Daemon::RunNotifier_() {
 
               } else if (event->mask & IN_MOVED_TO) {
                 if (!(event->mask & IN_ISDIR)) {
-                    files_to_process_.push_back(event_name_string);
-                  }
+                  add_event = true;
+//                    files_to_process_.push_back(event_name_string);
+                }
 
               } else if ( event->mask & IN_CLOSE_WRITE ) {
                 if (!(event->mask & IN_ISDIR)) {
                   FileMonitorType::iterator it = file_monitor.find(std::string(event_name_string));
                   if (it != file_monitor.end()) {
                     if ((it->second) > 0) {
-                      files_to_process_.push_back(event_name_string);
+                      add_event = true;
+//                      files_to_process_.push_back(event_name_string);
                     }
                   }
 
@@ -201,6 +208,13 @@ void Daemon::RunNotifier_() {
               } else if ( event->mask & IN_CLOSE_NOWRITE ) {
 
               }
+          }
+
+          if (add_event) {
+            queue_sem_->wait();
+            files_to_process_.push_back(event_name_string);
+            queue_sem_->post();
+            active_sem_->post();
           }
 
           i += EVENT_SIZE + event->len;
@@ -328,6 +342,11 @@ void Daemon::RunJobs_() {
 
   while (run_ == true) {
     active_sem_->wait();
+
+    if (terminate_ == true) {
+      break;
+    }
+
     queue_sem_->wait();
 
     std::string file_name = files_to_process_.front();
@@ -335,8 +354,12 @@ void Daemon::RunJobs_() {
 
     queue_sem_->post();
 
+    if (terminate_ == true) {
+      break;
+    }
+
     if (StringEndsWith_(file_name, valid_extension)) {
-      ProcessSingleJob(file_name);
+      ProcessSingleJob_(file_name);
     }
   }
 

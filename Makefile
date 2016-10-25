@@ -24,7 +24,7 @@ all: debug
 
 debug: $(OBJ_FILES_DEBUG)
 	@echo [LD DEBUG] $<
-	@mkdir -p $(dir $@)
+	@mkdir -p $(dir $(BIN))
 	@$(GCC) $(LD_FLAGS) $(LIB_DIRS) -o $(BIN) $(OBJ_FILES_DEBUG) $(LD_LIBS)
 
 $(OBJ_DEBUG)/%.o: %.cc $(H_FILES)
@@ -34,7 +34,7 @@ $(OBJ_DEBUG)/%.o: %.cc $(H_FILES)
 
 release: $(OBJ_FILES_RELEASE)
 	@echo [LD RELEASE] $<
-	@mkdir -p $(dir $@)
+	@mkdir -p $(dir $(BIN))
 	@$(GCC) $(LD_FLAGS) $(LIB_DIRS) -o $(BIN) $(OBJ_FILES_RELEASE) $(LD_LIBS)
 
 $(OBJ_RELEASE)/%.o: %.cc $(H_FILES)

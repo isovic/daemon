@@ -33,7 +33,8 @@
 #include <vector>
 #include <dirent.h>
 #include <deque>
-#include "thread_pool.hpp"
+
+#include "semaphore.h"
 
 #define EVENT_SIZE          ( sizeof (struct inotify_event) )
 #define EVENT_BUF_LEN       ( 1024 * ( EVENT_SIZE + NAME_MAX + 1) )
@@ -53,6 +54,8 @@ class Daemon {
   void Run(std::string watch_folder, std::string output_folder, std::string processing_folder, std::string task_extension, bool is_dry_run);
   bool is_run() const;
   void set_run(bool run);
+
+  friend void SigCallback(int sig);
 
  private:
   Daemon();
@@ -80,6 +83,7 @@ class Daemon {
 
   std::unique_ptr<Semaphore> queue_sem_;
   std::unique_ptr<Semaphore> active_sem_;
+  bool terminate_;
 };
 
 #endif /* DAEMON_H_ */
